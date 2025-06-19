@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  airflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: airflow-spark
+    ports:
+      - "8080:8080"
+      - "4040:4040"
+    volumes:
+      - ./airflow:/opt/airflow
+      - ./pyspark:/opt/airflow/pyspark
+      - ./drivers/mysql-connector-java-8.0.33.jar:/opt/spark/jars/mysql-connector-java-8.0.33.jar
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command: airflow standalone
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_CONN}
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    container_name: my_mysql
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  dash:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "8050:8050"
+    volumes:
+      - ./dashboard:/app
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_PORT: ${DB_PORT}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
